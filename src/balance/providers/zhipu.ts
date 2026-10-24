@@ -132,14 +132,17 @@ function resolveQuotaWindowDefinition(
   unit: number,
   number: number | undefined,
 ): ZhiPuWindowDefinition {
-  if (type === 'TOKENS_LIMIT' && unit === 3 && number === 5) {
+  // The limit type differs across plans and sites (CREDIT_LIMIT and
+  // TOKENS_LIMIT both observed), so 5-hour and weekly windows are identified
+  // by the unit/number pair alone.
+  if (unit === 3 && number === 5) {
     return {
       id: 'zhipu-quota-5-hour',
       label: t('5-hour limit'),
       period: 'custom',
     };
   }
-  if (type === 'TOKENS_LIMIT' && unit === 6) {
+  if (unit === 6) {
     return {
       id: 'zhipu-quota-weekly',
       label: t('Weekly limit'),
@@ -171,7 +174,9 @@ function parseQuotaWindow(
       id: `${definition.id}-remaining-percent`,
       type: 'percent',
       ...metricContext,
-      value: percentage,
+      // The server reports `percentage` as the used share (currentValue /
+      // usage), so store the remaining share for the display layer.
+      value: 100 - percentage,
       basis: 'remaining',
     });
   }
