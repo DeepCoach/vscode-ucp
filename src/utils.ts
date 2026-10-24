@@ -987,6 +987,7 @@ export function isRetryableNetworkError(
 
 const RETRYABLE_STREAM_READ_ERROR_CODES = new Set([
   'stream_read_error',
+  'upstream_http2_stream_error',
 ]);
 
 export class RetryableStreamReadError extends Error {
@@ -1068,6 +1069,8 @@ export function isRetryableStreamReadError(error: unknown): boolean {
         normalizedMessage.includes("stream_read_error") ||
         normalizedMessage.includes("stream read error") ||
         normalizedMessage.includes("servers are currently overloaded") ||
+        normalizedMessage.includes("upstream stream returned an error payload") ||
+        normalizedMessage.includes("closed before response.completed") ||
         isInternalStreamError
       ) {
         return true;

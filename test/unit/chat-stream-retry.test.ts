@@ -139,6 +139,62 @@ describe('chat stream retry classification', () => {
     ).toBe(true);
   });
 
+  it('still recognizes upstream_http2_stream_error codes on Error instances', () => {
+    expect(
+      isRetryableStreamReadError(
+        new CodedError(
+          'provider stream failed',
+          'upstream_http2_stream_error',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'a nested upstream error payload with a retryable code',
+      payload: {
+        error: {
+          code: 'upstream_http2_stream_error',
+          message: 'upstream http2 stream error',
+        },
+      },
+    },
+    {
+      name: 'a nested upstream error payload without a code',
+      payload: {
+        error: { message: 'upstream stream returned an error payload' },
+      },
+    },
+    {
+      name: 'a nested upstream error payload closed before response.completed',
+      payload: {
+        error: {
+          message:
+            'stream disconnected before completion: stream closed before response.completed',
+        },
+      },
+    },
+  ])('recognizes $name as retryable', ({ payload }) => {
+    expect(isRetryableStreamReadError(payload)).toBe(true);
+  });
+
+  it('does not match stream error codes that only differ in case', () => {
+    expect(
+      isRetryableStreamReadError(
+        new CodedError('provider stream failed', 'Upstream_Http2_Stream_Error'),
+      ),
+    ).toBe(false);
+  });
+
+  it('does not match a truncated message without the response.completed phrase', () => {
+    expect(
+      isRetryableStreamReadError({
+        error: { message: 'stream disconnected before completion' },
+      }),
+    ).toBe(false);
+  });
+
   it('does not treat an unmarked fetch-stage network error as a stream error', () => {
     expect(
       isRetryableStreamReadError(
