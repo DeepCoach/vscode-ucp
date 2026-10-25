@@ -1,6 +1,8 @@
 .vscode/**
 .claude/**
 .github/**
+.zcode/**
+.zcode_tmp/**
 src/**
 test/**
 out-test/**
