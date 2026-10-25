@@ -149,7 +149,7 @@ describe('ZhiPu balance provider', () => {
           id: 'zhipu-quota-5-hour-remaining-percent',
           type: 'percent',
           period: 'custom',
-          value: 64,
+          value: 36,
           basis: 'remaining',
           primary: true,
         }),
@@ -163,7 +163,7 @@ describe('ZhiPu balance provider', () => {
           id: 'zhipu-quota-weekly-remaining-percent',
           type: 'percent',
           period: 'week',
-          value: 90,
+          value: 10,
           basis: 'remaining',
         }),
         expect.objectContaining({
@@ -224,7 +224,7 @@ describe('ZhiPu balance provider', () => {
           id: 'zhipu-quota-monthly-remaining-percent',
           type: 'percent',
           period: 'month',
-          value: 70,
+          value: 30,
           basis: 'remaining',
           primary: true,
         }),
@@ -321,7 +321,7 @@ describe('ZhiPu balance provider', () => {
       snapshot?.items.find(
         (item) => item.id === 'zhipu-quota-5-hour-remaining-percent',
       ),
-    ).toMatchObject({ value: 64 });
+    ).toMatchObject({ value: 36 });
     expect(
       snapshot?.items.filter((item) => item.id === 'zhipu-quota-5-hour-reset'),
     ).toHaveLength(1);
@@ -360,6 +360,112 @@ describe('ZhiPu balance provider', () => {
     expect(parseZhiPuBalanceSnapshot({ success: true, code: 200 })).toBeUndefined();
   });
 
+  it('parses the real-world CREDIT_LIMIT quota payload with used-share percentages', () => {
+    // Values genericized from a live pro-plan response; percentage must still
+    // equal Math.floor(currentValue / usage * 100) to mirror server rounding.
+    const fiveHourReset = 1_800_000_000_000;
+    const weeklyReset = fiveHourReset + 3 * 24 * 60 * 60 * 1000;
+    const snapshot = parseZhiPuQuotaSnapshot({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        limits: [
+          {
+            type: 'CREDIT_LIMIT',
+            unit: 3,
+            number: 5,
+            usage: 1000,
+            currentValue: 96,
+            remaining: 904,
+            percentage: 9,
+            nextResetTime: fiveHourReset,
+          },
+          {
+            type: 'CREDIT_LIMIT',
+            unit: 6,
+            number: 1,
+            usage: 5000,
+            currentValue: 2580,
+            remaining: 2420,
+            percentage: 51,
+            nextResetTime: weeklyReset,
+          },
+        ],
+        level: 'pro',
+      },
+      success: true,
+    });
+
+    expect(snapshot?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'zhipu-quota-5-hour-remaining-percent',
+          type: 'percent',
+          period: 'custom',
+          value: 91,
+          basis: 'remaining',
+          primary: true,
+        }),
+        expect.objectContaining({
+          id: 'zhipu-quota-5-hour-reset',
+          type: 'time',
+          kind: 'resetAt',
+          timestampMs: fiveHourReset,
+        }),
+        expect.objectContaining({
+          id: 'zhipu-quota-weekly-remaining-percent',
+          type: 'percent',
+          period: 'week',
+          value: 49,
+          basis: 'remaining',
+        }),
+        expect.objectContaining({
+          id: 'zhipu-quota-weekly-reset',
+          type: 'time',
+          kind: 'resetAt',
+          timestampMs: weeklyReset,
+        }),
+      ]),
+    );
+    expect(
+      snapshot?.items.filter((item) => item.primary === true),
+    ).toHaveLength(1);
+    expect(snapshot?.items.some((item) => item.type === 'integer')).toBe(false);
+  });
+
+  it('parses the live PayGo balance payload with a zero balance', () => {
+    const snapshot = parseZhiPuBalanceSnapshot({
+      code: 200,
+      msg: 'Operation successful',
+      data: {
+        balance: 0.0,
+        rechargeAmount: 0.0,
+        giveAmount: 0.0,
+        totalSpendAmount: 0.0,
+        todaySpendAmount: null,
+        availableBalance: 0.0,
+        frozenBalance: 0.0,
+        creditBalance: null,
+        availableCreditBalance: null,
+        creditStatus: 'NOT_OPEN',
+        modelSpendAmountList: null,
+        isKA: false,
+      },
+      success: true,
+    });
+
+    expect(snapshot?.items).toEqual([
+      expect.objectContaining({
+        id: 'zhipu-balance',
+        type: 'amount',
+        period: 'current',
+        direction: 'remaining',
+        value: 0,
+        currencySymbol: '¥',
+      }),
+    ]);
+  });
+
   it('renders the remaining 5-hour percentage through the display helpers', () => {
     const snapshot = parseZhiPuQuotaSnapshot({
       success: true,
@@ -382,10 +488,10 @@ describe('ZhiPu balance provider', () => {
         item.id === 'zhipu-quota-5-hour-remaining-percent' &&
         item.type === 'percent',
     );
-    expect(percent && formatMetricValue(percent)).toBe('64%');
+    expect(percent && formatMetricValue(percent)).toBe('36%');
     expect(
       formatSnapshotLines(snapshot).some((line) =>
-        line.includes('5-hour limit: 36% / 100%'),
+        line.includes('5-hour limit: 64% / 100%'),
       ),
     ).toBe(true);
   });
@@ -461,7 +567,7 @@ describe('ZhiPu balance provider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: 'zhipu-quota-5-hour-remaining-percent',
-          value: 64,
+          value: 36,
         }),
         expect.objectContaining({
           id: 'zhipu-balance',
