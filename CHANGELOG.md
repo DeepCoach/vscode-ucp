@@ -1,5 +1,10 @@
 # Changelog
 
+## v8.15.1 - 2026-10-27
+
+### Features
+- add support for latest models (a18a04f, DeepCoach)
+
 ## v8.14.0 - 2026-10-09
 
 ### Features
