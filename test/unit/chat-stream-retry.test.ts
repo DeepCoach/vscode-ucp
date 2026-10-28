@@ -1,3 +1,4 @@
+import { InternalServerError } from 'openai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', () => ({}));
@@ -175,8 +176,60 @@ describe('chat stream retry classification', () => {
         },
       },
     },
+    {
+      name: 'the reported upstream gateway payload with an upstream_error type',
+      payload: {
+        error: {
+          message: 'Upstream service temporarily unavailable, please retry later',
+          type: 'upstream_error',
+        },
+        sequence_number: 8,
+      },
+    },
+    {
+      name: 'an Error instance carrying the gateway message',
+      payload: new Error(
+        'Upstream service temporarily unavailable, please retry later',
+      ),
+    },
+    {
+      name: 'the gateway message in mixed case (matched after lowercasing)',
+      payload: {
+        error: {
+          message: 'Upstream Service TEMPORARILY Unavailable, please retry later',
+        },
+      },
+    },
+    {
+      name: 'an upstream_error type despite a non-transient message',
+      payload: {
+        error: { message: 'upstream service unavailable', type: 'upstream_error' },
+      },
+    },
+    {
+      name: 'an upstream_error type with an unrelated message',
+      payload: { error: { message: 'anything', type: 'upstream_error' } },
+    },
+    {
+      name: 'a top-level upstream_error type (SDK error mirror)',
+      payload: { type: 'upstream_error' },
+    },
   ])('recognizes $name as retryable', ({ payload }) => {
     expect(isRetryableStreamReadError(payload)).toBe(true);
+  });
+
+  it('retries a 502 gateway error surfaced by the SDK once the fetch retry budget is exhausted (stream-layer retry intentionally stacks on the transport-layer budget)', () => {
+    const error = new InternalServerError(
+      502,
+      {
+        message: 'Upstream service temporarily unavailable, please retry later',
+        type: 'upstream_error',
+      },
+      undefined,
+      new Headers(),
+    );
+
+    expect(isRetryableStreamReadError(error)).toBe(true);
   });
 
   it('does not match stream error codes that only differ in case', () => {
@@ -193,6 +246,27 @@ describe('chat stream retry classification', () => {
         error: { message: 'stream disconnected before completion' },
       }),
     ).toBe(false);
+  });
+
+  it.each([
+    {
+      name: 'a bare temporarily unavailable message without the upstream service prefix',
+      payload: { error: { message: 'temporarily unavailable' } },
+    },
+    {
+      name: 'a reordered upstream temporarily unavailable message',
+      payload: { error: { message: 'upstream temporarily unavailable' } },
+    },
+    {
+      name: 'a truncated upstream service message',
+      payload: { error: { message: 'upstream service temporarily' } },
+    },
+    {
+      name: 'an upstream_error type that only differs in case',
+      payload: { error: { type: 'Upstream_Error' } },
+    },
+  ])('does not match $name as retryable', ({ payload }) => {
+    expect(isRetryableStreamReadError(payload)).toBe(false);
   });
 
   it('does not treat an unmarked fetch-stage network error as a stream error', () => {
@@ -225,6 +299,36 @@ describe('chat stream retry policy', () => {
   const retryableError = new RetryableStreamReadError(
     new Error('transient stream failure'),
   );
+
+  const gatewayErrorPayload = {
+    error: {
+      message: 'Upstream service temporarily unavailable, please retry later',
+      type: 'upstream_error',
+    },
+    sequence_number: 8,
+  };
+
+  it('retries the reported gateway error payload before the first emitted part', () => {
+    expect(
+      shouldRetryStreamReadError(gatewayErrorPayload, {
+        emittedPartCount: 0,
+        cancellationRequested: false,
+        retryAttempt: 0,
+        maxRetries: 10,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not retry the gateway error payload after a part was emitted', () => {
+    expect(
+      shouldRetryStreamReadError(gatewayErrorPayload, {
+        emittedPartCount: 1,
+        cancellationRequested: false,
+        retryAttempt: 0,
+        maxRetries: 10,
+      }),
+    ).toBe(false);
+  });
 
   it('retries a marked error before the first emitted part', () => {
     expect(
