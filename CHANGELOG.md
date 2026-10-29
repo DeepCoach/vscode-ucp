@@ -5,6 +5,9 @@
 ### Features
 - add support for latest models (a18a04f, DeepCoach)
 
+### Fixes
+- retry chat streams on upstream service unavailable gateway errors (d7906ff, DeepCoach)
+
 ## v8.14.0 - 2026-10-09
 
 ### Features
