@@ -1,5 +1,11 @@
 # Changelog
 
+## v8.15.2 - 2026-11-05
+
+### Fixes
+- zed: correct gemini thinking config mapping for 2.5/3.8/4 models (18243d2, DeepCoach)
+- zed: strip non-gemini schema fields from function declarations (fixes #371) (2d7d618, DeepCoach)
+
 ## v8.15.1 - 2026-10-27
 
 ### Features
